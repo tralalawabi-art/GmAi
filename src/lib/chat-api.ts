@@ -73,8 +73,15 @@ export async function streamChat({ messages, model, webSearch, onDelta, onDone, 
 
         try {
           const parsed = JSON.parse(jsonStr);
-          const content = parsed.choices?.[0]?.delta?.content as string | undefined;
-          if (content) onDelta(content);
+          const rawContent = parsed.choices?.[0]?.delta?.content;
+          if (rawContent) {
+            const text = typeof rawContent === "string"
+              ? rawContent
+              : typeof rawContent === "object" && rawContent.answer
+                ? rawContent.answer
+                : JSON.stringify(rawContent);
+            onDelta(text);
+          }
         } catch {
           textBuffer = line + "\n" + textBuffer;
           break;
@@ -92,8 +99,15 @@ export async function streamChat({ messages, model, webSearch, onDelta, onDone, 
         if (jsonStr === "[DONE]") continue;
         try {
           const parsed = JSON.parse(jsonStr);
-          const content = parsed.choices?.[0]?.delta?.content;
-          if (content) onDelta(content);
+          const rawContent = parsed.choices?.[0]?.delta?.content;
+          if (rawContent) {
+            const text = typeof rawContent === "string"
+              ? rawContent
+              : typeof rawContent === "object" && rawContent.answer
+                ? rawContent.answer
+                : JSON.stringify(rawContent);
+            onDelta(text);
+          }
         } catch { /* ignore */ }
       }
     }
