@@ -1,51 +1,97 @@
 
 
-## Implementasi URL-based Conversation Routing
+## Rencana Implementasi: Copy/Regenerate + DeepSeek Thinking Mode
 
-Saat ini, conversation ID hanya disimpan di state React (memori) dan localStorage. Ketika user refresh halaman, chat aktif hilang. Kita akan menambahkan routing berbasis URL agar setiap percakapan punya alamat unik.
+### Status Item #1 & #2: Sudah Selesai
+URL-based routing (`/chat/:conversationId`) sudah diimplementasikan di update terakhir. Route, hook, dan sinkronisasi URL sudah berjalan.
 
-### Perubahan yang akan dilakukan:
+---
 
-**1. Tambah route `/chat/:conversationId` di App.tsx**
-- Route baru: `/chat/:id` mengarah ke halaman Index
-- Route `/` tetap sebagai landing (welcome screen)
+### Item #3: Tombol Copy & Regenerate pada Pesan
 
-**2. Update `useChat` hook untuk sinkron dengan URL**
-- Saat `newChat()` dipanggil, navigasi ke `/chat/{uuid}`
-- Saat user membuka `/chat/{id}`, otomatis set conversation aktif berdasarkan ID di URL
-- Saat `selectChat(id)` dipanggil, navigasi ke `/chat/{id}`
-- Saat `deleteChat(id)` dipanggil dan itu chat aktif, navigasi kembali ke `/`
+**File: `src/components/chat/MessageBubble.tsx`**
+- Tambahkan toolbar kecil di bawah setiap bubble assistant dengan 2 tombol:
+  - **Copy**: Salin seluruh konten jawaban ke clipboard (gunakan `navigator.clipboard.writeText`)
+  - **Regenerate**: Panggil callback `onRegenerate` yang dikirim dari parent
+- Toolbar muncul saat hover (desktop) atau selalu visible (mobile)
+- Gunakan ikon dari lucide-react: `Copy`, `Check`, `RefreshCw`
 
-**3. Update Index.tsx**
-- Baca `conversationId` dari `useParams()`
-- Kirim ke `useChat` sebagai initial active ID
-- Saat user mengirim pesan pertama tanpa conversation (dari welcome screen), otomatis buat conversation baru dan redirect ke `/chat/{id}`
+**File: `src/hooks/use-chat.ts`**
+- Tambahkan fungsi `regenerate(messageId)`:
+  - Cari pesan assistant berdasarkan ID
+  - Hapus pesan assistant tersebut dari conversation
+  - Kirim ulang pesan user terakhir sebelumnya via `sendMessage`
+- Export fungsi `regenerate` dari hook
 
-**4. Backend tetap sama**
-- Backend edge function sudah menerima full message history dari frontend
-- Tidak perlu perubahan di backend karena context/memory sudah dikirim dari frontend via `messages` array
+**File: `src/pages/Index.tsx`**
+- Pass `onRegenerate` callback ke `MessageBubble`
+
+---
+
+### Item #4: DeepSeek R1 Thinking Mode
+
+DeepSeek R1 mengirim respons dengan format `<think>...</think>` diikuti jawaban utama. Kita perlu:
+
+**A. Parsing konten `<think>` (Frontend)**
+
+**File: `src/lib/think-parser.ts`** (baru)
+- Fungsi `parseThinkContent(raw: string)` yang mengembalikan:
+  ```text
+  { thinking: string | null, answer: string, isThinking: boolean }
+  ```
+- Logic: cari `<think>` dan `</think>` dalam string
+  - Jika ada `<think>` tapi belum ada `</think>` --> sedang berpikir (`isThinking: true`)
+  - Jika ada `<think>...</think>` --> selesai berpikir, pisahkan thinking dan answer
+  - Jika tidak ada tag --> langsung answer biasa
+
+**B. UI Thinking pada MessageBubble**
+
+**File: `src/components/chat/MessageBubble.tsx`**
+- Untuk pesan DeepSeek (`message.model === "deepseek"`), jalankan `parseThinkContent`
+- **State 1 - Sedang Berpikir** (`isThinking: true`):
+  - Tampilkan animasi khusus: ikon otak berdenyut dengan teks "Sedang berpikir..." 
+  - Background gradien halus yang beranimasi (pulse)
+  - Tampilkan preview teks thinking yang sedang streaming dalam font kecil italic abu-abu
+- **State 2 - Selesai**:
+  - Tampilkan jawaban utama dengan markdown normal
+  - Di atas jawaban, tambahkan collapsible section:
+    - Header: ikon otak + "Lihat proses berpikir" (klik untuk expand/collapse)
+    - Konten: teks thinking dalam background abu-abu/transparan berbeda
+    - Default: collapsed
+
+**C. CSS untuk animasi thinking**
+
+**File: `src/index.css`**
+- Tambahkan animasi `thinking-pulse` untuk efek berdenyut pada ikon otak
+- Tambahkan style `thinking-gradient` untuk background bergerak saat AI berpikir
+
+---
 
 ### Detail Teknis
 
-**App.tsx:**
-- Tambah `<Route path="/chat/:conversationId" element={<Index />} />`
+**Parsing `<think>` tag:**
+```text
+Input:  "<think>reasoning here</think>\n\nFinal answer here"
+Output: { thinking: "reasoning here", answer: "Final answer here", isThinking: false }
 
-**useChat hook:**
-- Terima `useNavigate()` dan `conversationId` param
-- `newChat()`: buat conversation, lalu `navigate(/chat/{id})`
-- `selectChat(id)`: set active + `navigate(/chat/{id})`
-- `deleteChat(id)`: hapus, jika aktif `navigate(/)`
-- Inisialisasi: jika ada `conversationId` di URL, set sebagai `activeId`
+Input:  "<think>still reasoning..."
+Output: { thinking: "still reasoning...", answer: "", isThinking: true }
+```
 
-**Index.tsx:**
-- Gunakan `useParams()` untuk ambil `conversationId`
-- Pass ke hook atau gunakan untuk sinkronisasi
+**Alur Data:**
+1. DeepSeek streaming --> `onDelta` menambah chunk ke `assistantContent`
+2. `MessageBubble` menerima `message.content` yang berisi raw text dengan `<think>` tag
+3. `parseThinkContent()` memisahkan thinking vs answer
+4. UI merender sesuai state (berpikir/selesai)
 
-### Alur User Setelah Implementasi
-1. User buka `/` -- melihat welcome screen
-2. Klik "New Chat" -- redirect ke `/chat/550e8400-...`
-3. Ketik pesan -- dikirim dengan conversation ID, AI merespon dengan konteks
-4. Refresh halaman -- tetap di `/chat/550e8400-...`, chat history muncul dari localStorage
-5. Klik chat lain di sidebar -- URL berubah ke `/chat/{id-lain}`
-6. Share URL ke tab lain -- langsung buka percakapan yang sama
+**Komponen baru yang dibutuhkan:**
+- `ThinkingAnimation`: Animasi saat AI berpikir (pulse brain icon + gradient)
+- `ThinkingCollapsible`: Expand/collapse untuk riwayat berpikir setelah selesai
+
+**File yang diubah:**
+1. `src/lib/think-parser.ts` -- baru, parser tag think
+2. `src/components/chat/MessageBubble.tsx` -- tambah Copy/Regenerate + thinking UI
+3. `src/hooks/use-chat.ts` -- tambah fungsi regenerate
+4. `src/pages/Index.tsx` -- pass onRegenerate ke MessageBubble
+5. `src/index.css` -- animasi thinking
 
