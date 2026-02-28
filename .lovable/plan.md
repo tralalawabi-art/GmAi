@@ -1,62 +1,65 @@
 
+Masalah utamanya sudah bisa dilacak, dan ini bukan karena “backend belum dibuat”. Backend + frontend sudah ada dan request ke backend sebenarnya berjalan.
 
-# Fmc AI — Modern AI Chat App
+Ringkasan temuan dari investigasi:
+1) Request ke backend untuk ketiga model berhasil (status 200) dan streaming SSE keluar.
+- Quillbot: mengembalikan SSE `data: {"choices":[{"delta":{"content":{...}}}]}`
+- Gemini: mengembalikan teks normal.
+- DeepSeek: mengembalikan stream chunk normal.
+2) Di frontend, balasan assistant tidak dirender karena komponen markdown dipanggil tanpa isi konten.
+- File: `src/components/chat/MessageBubble.tsx`
+- `ReactMarkdown` dipakai self-closing (`<ReactMarkdown ... />`) sehingga `message.content` tidak pernah tampil.
+3) Khusus Quillbot, backend saat ini kadang mengirim object pada `delta.content` (bukan string), jadi walaupun render diperbaiki, isinya bisa jadi `[object Object]`/tidak sesuai.
+- File: `supabase/functions/chat/index.ts`
+- `reply` mengambil `data.response` lebih dulu, padahal nilainya bisa object `{ answer, chatId, webSearch }`.
 
-## Overview
-A sleek, glassmorphism-styled AI chat application with multi-model support (Quillbot, Gemini 2.5 Flash, and DeepSeek R1), featuring image analysis, conversation memory, and a polished modern UI.
+Rencana implementasi perbaikan:
 
-## Design & Theme
-- **Glassmorphism UI**: Frosted glass panels, subtle gradients, backdrop blur effects, soft shadows
-- **Dark/Light mode** toggle with smooth transitions
-- **Plus Jakarta Sans** font for a premium feel
-- **Responsive**: Full sidebar on desktop, slide-out drawer on mobile
+1. Perbaiki rendering pesan assistant di frontend (prioritas tertinggi)
+- File: `src/components/chat/MessageBubble.tsx`
+- Ubah komponen markdown agar menerima isi:
+  - dari: `<ReactMarkdown ... />`
+  - ke: `<ReactMarkdown ...>{message.content}</ReactMarkdown>`
+- Dampak: semua model langsung bisa terlihat output-nya di UI.
 
-## Pages & Layout
+2. Normalisasi output Quillbot agar selalu string
+- File: `supabase/functions/chat/index.ts` pada `handleQuillbot`
+- Tambahkan extractor aman:
+  - jika `data.response` string → pakai itu
+  - jika `data.response` object dan punya `answer` → pakai `data.response.answer`
+  - fallback ke `data.message`, `data.text`, `data.result`
+  - fallback terakhir `JSON.stringify(...)`
+- Pastikan `delta.content` yang dikirim SSE selalu string.
+- Dampak: Quillbot tidak lagi mengirim object mentah ke frontend.
 
-### 1. Chat Page (Main)
-- **Sidebar** (glass-effect): New chat button, conversation history list with delete, dark mode toggle, Fmc AI branding
-- **Chat area**: Message bubbles with avatars, markdown rendering (code highlighting, math, tables), typing indicator animation
-- **Input bar** (floating glass card):
-  - Model selector dropdown (Quillbot, Gemini 2.5 Flash, DeepSeek R1) with icons
-  - Web Search toggle chip (for Quillbot model)
-  - Image upload button with drag & drop zone (enabled when Gemini is selected)
-  - Text input with auto-resize + send button
+3. Hardening parser stream di frontend (opsional tapi disarankan)
+- File: `src/lib/chat-api.ts`
+- Saat parse SSE:
+  - jika `content` string → langsung kirim
+  - jika `content` object dengan `answer` → kirim `answer`
+  - selain itu stringify aman
+- Ini jadi lapisan perlindungan jika provider lain mengubah format respons.
 
-### 2. Welcome Screen
-- Fmc AI logo and greeting
-- Suggestion cards (Travel, Physics, Coding) to quick-start a conversation
+4. Perbaiki observability error agar tidak “silent”
+- File: `supabase/functions/chat/index.ts`
+- Saat provider gagal (`!resp.ok`), selain generic message, sertakan ringkasan status/provider pada log internal.
+- Di frontend, pertahankan tampilan error di bubble seperti sekarang agar user tahu penyebabnya.
 
-## Core Features
+5. Validasi end-to-end setelah perubahan
+- Uji 3 model dari UI:
+  - Quillbot: pastikan teks jawaban muncul (bukan object)
+  - Gemini: pastikan streaming teks muncul bertahap
+  - DeepSeek: pastikan chunk bergabung jadi jawaban utuh
+- Uji juga:
+  - chat baru
+  - percakapan lama
+  - kirim gambar ke Gemini
+  - tombol stop generation
 
-### Multi-Model Chat
-- **Dropdown selector** in the input area to switch between:
-  - 🔵 **Quillbot** (existing FmcStore API) — with optional web search
-  - 🟢 **Gemini 2.5 Flash** — supports image analysis and conversation memory
-  - 🟣 **DeepSeek R1** (SambaNova) — reasoning-focused model
-- Each model's responses styled with a subtle color accent
+Perkiraan akar masalah final:
+- “Model tidak merespon” yang user rasakan terutama karena layer tampilan assistant rusak (konten tidak dirender), bukan karena backend tidak ada.
+- Ditambah satu bug format data di Quillbot yang membuat konten bukan string.
 
-### Image Analysis (Gemini)
-- Drag & drop or click to attach images
-- Image preview thumbnail before sending
-- Gemini analyzes uploaded images and responds with descriptions/insights
-
-### Conversation Memory
-- Full conversation history sent with each request for context-aware replies
-- Chat history saved to localStorage with titles
-- New chat / delete history management in sidebar
-
-### Message Rendering
-- Markdown with syntax-highlighted code blocks (highlight.js)
-- Copy-to-clipboard button on code blocks
-- MathJax for mathematical expressions
-- Toast notifications for copy actions
-
-## Backend & Security
-- **Lovable Cloud** with Supabase Edge Functions to securely store and use API keys (Gemini, SambaNova, FmcStore)
-- API keys will NOT be exposed in frontend code
-- Streaming responses for Gemini model for real-time token display
-- Error handling with user-friendly toast messages (rate limits, connection errors)
-
-## Data Storage
-- **localStorage** for chat history and theme preference (no database needed for MVP)
-
+Catatan teknis tambahan:
+- Warning `Function components cannot be given refs` yang muncul di console kemungkinan terpisah dari issue “AI tidak muncul”, tapi tetap bisa kita rapikan setelah respons model sudah normal.
+- Fokus patch awal: tampilkan konten assistant + normalisasi Quillbot string agar user langsung merasakan perbaikan.
