@@ -152,6 +152,35 @@ export function useChat(conversationIdFromUrl?: string) {
     setIsLoading(false);
   }, []);
 
+  const regenerate = useCallback(
+    (messageId: string) => {
+      if (!active) return;
+      const msgIndex = active.messages.findIndex((m) => m.id === messageId);
+      if (msgIndex === -1) return;
+
+      // Find the user message right before this assistant message
+      let userMsg: Message | null = null;
+      for (let i = msgIndex - 1; i >= 0; i--) {
+        if (active.messages[i].role === "user") {
+          userMsg = active.messages[i];
+          break;
+        }
+      }
+      if (!userMsg) return;
+
+      // Remove the assistant message
+      const updated = { ...active };
+      updated.messages = active.messages.filter((m) => m.id !== messageId);
+      updated.updatedAt = Date.now();
+      updateConversation(updated);
+      refresh();
+
+      // Re-send the user's message
+      sendMessage(userMsg.content, userMsg.imageBase64);
+    },
+    [active, sendMessage]
+  );
+
   return {
     conversations,
     active,
@@ -166,5 +195,6 @@ export function useChat(conversationIdFromUrl?: string) {
     deleteChat,
     sendMessage,
     stopGeneration,
+    regenerate,
   };
 }
