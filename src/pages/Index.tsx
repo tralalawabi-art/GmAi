@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useParams } from "react-router-dom";
 import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -13,6 +14,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 
 const Index = () => {
+  const { conversationId } = useParams<{ conversationId: string }>();
   const {
     conversations,
     active,
@@ -27,7 +29,7 @@ const Index = () => {
     deleteChat,
     sendMessage,
     stopGeneration,
-  } = useChat();
+  } = useChat(conversationId);
 
   const [isDark, setIsDark] = useState(() => getTheme() === "dark");
   const [sidebarOpen, setSidebarOpen] = useState(false);

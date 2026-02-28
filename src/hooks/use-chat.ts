@@ -1,4 +1,5 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import type { Message, ModelId, Conversation } from "@/lib/chat-store";
 import {
   getConversations,
@@ -8,9 +9,10 @@ import {
 } from "@/lib/chat-store";
 import { streamChat } from "@/lib/chat-api";
 
-export function useChat() {
+export function useChat(conversationIdFromUrl?: string) {
+  const navigate = useNavigate();
   const [conversations, setConversations] = useState(getConversations);
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(conversationIdFromUrl || null);
   const [isLoading, setIsLoading] = useState(false);
   const [model, setModel] = useState<ModelId>("gemini");
   const [webSearch, setWebSearch] = useState(false);
@@ -20,26 +22,38 @@ export function useChat() {
 
   const refresh = () => setConversations(getConversations());
 
+  // Sync activeId when URL param changes
+  useEffect(() => {
+    if (conversationIdFromUrl) {
+      setActiveId(conversationIdFromUrl);
+    }
+  }, [conversationIdFromUrl]);
+
   const newChat = useCallback(() => {
     const convo = createConversation();
     updateConversation(convo);
     setActiveId(convo.id);
     refresh();
+    navigate(`/chat/${convo.id}`);
     return convo;
-  }, []);
+  }, [navigate]);
 
   const selectChat = useCallback((id: string) => {
     setActiveId(id);
-  }, []);
+    navigate(`/chat/${id}`);
+  }, [navigate]);
 
   const deleteChat = useCallback(
     (id: string) => {
       const convos = getConversations().filter((c) => c.id !== id);
       localStorage.setItem("fmc-ai-conversations", JSON.stringify(convos));
-      if (activeId === id) setActiveId(null);
+      if (activeId === id) {
+        setActiveId(null);
+        navigate("/");
+      }
       setConversations(convos);
     },
-    [activeId]
+    [activeId, navigate]
   );
 
   const sendMessage = useCallback(
@@ -49,6 +63,7 @@ export function useChat() {
         convo = createConversation();
         updateConversation(convo);
         setActiveId(convo.id);
+        navigate(`/chat/${convo.id}`);
       } else {
         convo = { ...active };
       }
@@ -109,7 +124,6 @@ export function useChat() {
         },
         onError: (error) => {
           setIsLoading(false);
-          // Add error as assistant message
           const updated = { ...convo };
           const existing = updated.messages.find((m) => m.id === assistantId);
           if (!existing) {
@@ -130,7 +144,7 @@ export function useChat() {
         },
       });
     },
-    [active, model, webSearch]
+    [active, model, webSearch, navigate]
   );
 
   const stopGeneration = useCallback(() => {
