@@ -29,6 +29,7 @@ const Index = () => {
     deleteChat,
     sendMessage,
     stopGeneration,
+    regenerate,
   } = useChat(conversationId);
 
   const [isDark, setIsDark] = useState(() => getTheme() === "dark");
@@ -121,7 +122,7 @@ const Index = () => {
           <div ref={scrollRef} className="flex-1 overflow-y-auto">
             <div className="max-w-3xl mx-auto px-4">
               {active.messages.map((msg) => (
-                <MessageBubble key={msg.id} message={msg} />
+                <MessageBubble key={msg.id} message={msg} onRegenerate={msg.role === "assistant" ? regenerate : undefined} />
               ))}
               {isLoading && !active.messages.some(m => m.role === "assistant" && m.id === active.messages[active.messages.length - 1]?.id) && (
                 <TypingIndicator />

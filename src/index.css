@@ -128,6 +128,32 @@
     -webkit-backdrop-filter: blur(12px);
     border: 1px solid hsl(var(--glass-border));
   }
+
+  .thinking-pulse {
+    animation: thinkPulse 1.5s ease-in-out infinite;
+  }
+
+  .thinking-gradient {
+    background: linear-gradient(
+      135deg,
+      hsl(var(--model-deepseek) / 0.08),
+      hsl(var(--muted) / 0.5),
+      hsl(var(--model-deepseek) / 0.05)
+    );
+    background-size: 200% 200%;
+    animation: thinkGradient 3s ease infinite;
+  }
+}
+
+@keyframes thinkPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.15); }
+}
+
+@keyframes thinkGradient {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
 
 /* Custom scrollbar */
