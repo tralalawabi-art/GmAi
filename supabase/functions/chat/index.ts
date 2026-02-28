@@ -37,14 +37,6 @@ serve(async (req) => {
 
 // ---- Quillbot (FmcStore API) ----
 async function handleQuillbot(messages: any[], webSearch?: boolean) {
-  const FMCSTORE_API_KEY = Deno.env.get("FMCSTORE_API_KEY");
-  if (!FMCSTORE_API_KEY) {
-    return new Response(JSON.stringify({ error: "FmcStore API key not configured" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
   const lastMsg = messages[messages.length - 1]?.content || "";
 
   const body: Record<string, unknown> = {
@@ -52,12 +44,10 @@ async function handleQuillbot(messages: any[], webSearch?: boolean) {
     ...(webSearch ? { web_search: true } : {}),
   };
 
-  // FmcStore uses a simple request/response format
   const resp = await fetch("https://fmcstore.com/api/chat", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${FMCSTORE_API_KEY}`,
     },
     body: JSON.stringify(body),
   });
