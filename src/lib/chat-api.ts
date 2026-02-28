@@ -50,6 +50,34 @@ export async function streamChat({ messages, model, webSearch, onDelta, onDone, 
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
     let textBuffer = "";
+    let inThinking = false; // Track if we're inside a thinking block
+
+    const processDelta = (delta: any) => {
+      // Handle DeepSeek reasoning_content (thinking)
+      const reasoningContent = delta.reasoning_content;
+      if (reasoningContent && typeof reasoningContent === "string") {
+        if (!inThinking) {
+          inThinking = true;
+          onDelta("<think>");
+        }
+        onDelta(reasoningContent);
+      }
+
+      const rawContent = delta.content;
+      if (rawContent) {
+        // If we were thinking and now getting content, close the think tag
+        if (inThinking) {
+          inThinking = false;
+          onDelta("</think>\n\n");
+        }
+        const text = typeof rawContent === "string"
+          ? rawContent
+          : typeof rawContent === "object" && rawContent.answer
+            ? rawContent.answer
+            : JSON.stringify(rawContent);
+        onDelta(text);
+      }
+    };
 
     while (true) {
       const { done, value } = await reader.read();
@@ -67,21 +95,15 @@ export async function streamChat({ messages, model, webSearch, onDelta, onDone, 
 
         const jsonStr = line.slice(6).trim();
         if (jsonStr === "[DONE]") {
+          if (inThinking) onDelta("</think>\n\n");
           onDone();
           return;
         }
 
         try {
           const parsed = JSON.parse(jsonStr);
-          const rawContent = parsed.choices?.[0]?.delta?.content;
-          if (rawContent) {
-            const text = typeof rawContent === "string"
-              ? rawContent
-              : typeof rawContent === "object" && rawContent.answer
-                ? rawContent.answer
-                : JSON.stringify(rawContent);
-            onDelta(text);
-          }
+          const delta = parsed.choices?.[0]?.delta;
+          if (delta) processDelta(delta);
         } catch {
           textBuffer = line + "\n" + textBuffer;
           break;
@@ -99,19 +121,13 @@ export async function streamChat({ messages, model, webSearch, onDelta, onDone, 
         if (jsonStr === "[DONE]") continue;
         try {
           const parsed = JSON.parse(jsonStr);
-          const rawContent = parsed.choices?.[0]?.delta?.content;
-          if (rawContent) {
-            const text = typeof rawContent === "string"
-              ? rawContent
-              : typeof rawContent === "object" && rawContent.answer
-                ? rawContent.answer
-                : JSON.stringify(rawContent);
-            onDelta(text);
-          }
+          const delta = parsed.choices?.[0]?.delta;
+          if (delta) processDelta(delta);
         } catch { /* ignore */ }
       }
     }
 
+    if (inThinking) onDelta("</think>\n\n");
     onDone();
   } catch (err: unknown) {
     if (err instanceof Error && err.name === "AbortError") return;
