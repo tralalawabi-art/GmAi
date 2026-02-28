@@ -55,7 +55,16 @@ async function handleQuillbot(messages: any[], webSearch?: boolean) {
   }
 
   const data = await resp.json();
-  const reply = data.response || data.message || data.text || data.result || JSON.stringify(data);
+  // Normalize reply to always be a string
+  let reply: string;
+  const raw = data.response ?? data.message ?? data.text ?? data.result ?? data;
+  if (typeof raw === "string") {
+    reply = raw;
+  } else if (raw && typeof raw === "object" && typeof raw.answer === "string") {
+    reply = raw.answer;
+  } else {
+    reply = JSON.stringify(raw);
+  }
 
   // Convert to SSE format for consistent frontend handling
   const encoder = new TextEncoder();

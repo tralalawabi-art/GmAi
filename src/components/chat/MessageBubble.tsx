@@ -68,7 +68,9 @@ export function MessageBubble({ message }: MessageBubbleProps) {
                   );
                 },
               }}
-            />
+            >
+              {message.content}
+            </ReactMarkdown>
           </div>
         )}
       </div>
