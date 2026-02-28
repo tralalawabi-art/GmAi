@@ -35,22 +35,15 @@ serve(async (req) => {
   }
 });
 
-// ---- Quillbot (FmcStore API) ----
+// ---- Quillbot (FmcStore API) — GET with query params ----
 async function handleQuillbot(messages: any[], webSearch?: boolean) {
   const lastMsg = messages[messages.length - 1]?.content || "";
 
-  const body: Record<string, unknown> = {
-    message: lastMsg,
-    ...(webSearch ? { web_search: true } : {}),
-  };
+  const targetUrl = new URL("https://api.fmcstore.web.id/api/ai/quillbot");
+  targetUrl.searchParams.set("query", lastMsg);
+  targetUrl.searchParams.set("webSearch", webSearch ? "true" : "false");
 
-  const resp = await fetch("https://fmcstore.com/api/chat", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
+  const resp = await fetch(targetUrl.toString());
 
   if (!resp.ok) {
     const text = await resp.text();
@@ -62,7 +55,7 @@ async function handleQuillbot(messages: any[], webSearch?: boolean) {
   }
 
   const data = await resp.json();
-  const reply = data.response || data.message || data.text || JSON.stringify(data);
+  const reply = data.response || data.message || data.text || data.result || JSON.stringify(data);
 
   // Convert to SSE format for consistent frontend handling
   const encoder = new TextEncoder();
