@@ -1,4 +1,4 @@
-export type ModelId = "quillbot" | "gemini" | "deepseek";
+export type ModelId = "quillbot" | "gemini" | "deepseek" | "claude" | "gemini3flash";
 
 export interface Message {
   id: string;
@@ -88,5 +88,17 @@ export const MODEL_INFO: Record<ModelId, { name: string; color: string; icon: st
     color: "hsl(var(--model-deepseek))",
     icon: "🟣",
     description: "Reasoning-focused model",
+  },
+  claude: {
+    name: "Claude Haiku 3",
+    color: "hsl(var(--model-claude))",
+    icon: "🟠",
+    description: "Fast & smart assistant",
+  },
+  gemini3flash: {
+    name: "Gemini 3 Flash",
+    color: "hsl(var(--model-gemini3flash))",
+    icon: "⚡",
+    description: "Gemini 3 via custom API",
   },
 };

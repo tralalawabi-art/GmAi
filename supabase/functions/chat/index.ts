@@ -20,6 +20,10 @@ serve(async (req) => {
       return await handleGemini(messages);
     } else if (model === "deepseek") {
       return await handleDeepSeek(messages);
+    } else if (model === "claude") {
+      return await handleClaude(messages);
+    } else if (model === "gemini3flash") {
+      return await handleGemini3Flash(messages);
     }
 
     return new Response(JSON.stringify({ error: "Unknown model" }), {
@@ -246,6 +250,100 @@ async function handleDeepSeek(messages: any[]) {
 
   // SambaNova uses OpenAI-compatible SSE, pass through
   return new Response(resp.body, {
+    headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+  });
+}
+
+// ---- Claude Haiku 3 (via DeepAI) ----
+async function handleClaude(messages: any[]) {
+  const r = Math.floor(1e11 * Math.random());
+  const apiKey = `tryit-${r}-a3edf17b505349f1794bcdbc7290a045`;
+  const sessionUuid = crypto.randomUUID();
+
+  // Build chat history with system prompt
+  const chatHistory = [
+    { role: "system", content: "Kamu adalah asisten AI yang cerdas dan jujur." },
+    ...messages.map((m: any) => ({ role: m.role, content: m.content })),
+  ];
+
+  const formData = new URLSearchParams();
+  formData.append("chat_style", "claudeai_0");
+  formData.append("chatHistory", JSON.stringify(chatHistory));
+  formData.append("model", "standard");
+  formData.append("session_uuid", sessionUuid);
+  formData.append("hacker_is_stinky", "very_stinky");
+
+  const resp = await fetch("https://api.deepai.org/hacking_is_a_serious_crime", {
+    method: "POST",
+    headers: {
+      "api-key": apiKey,
+      "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "referer": "https://deepai.org/chat/claude-3-haiku",
+      "accept": "*/*",
+      "content-type": "application/x-www-form-urlencoded",
+    },
+    body: formData.toString(),
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    console.error("Claude/DeepAI error:", resp.status, text);
+    return new Response(JSON.stringify({ error: "Claude API error" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const reply = await resp.text();
+
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    start(controller) {
+      const chunk = JSON.stringify({ choices: [{ delta: { content: reply } }] });
+      controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+      controller.close();
+    },
+  });
+
+  return new Response(stream, {
+    headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+  });
+}
+
+// ---- Gemini 3 Flash (custom API) ----
+async function handleGemini3Flash(messages: any[]) {
+  const lastMsg = messages[messages.length - 1]?.content || "";
+
+  const resp = await fetch("https://www.puruboy.kozow.com/api/ai/gemini", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt: lastMsg }),
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    console.error("Gemini3Flash error:", resp.status, text);
+    return new Response(JSON.stringify({ error: "Gemini 3 Flash API error" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const data = await resp.json();
+  const reply = data?.result?.answer || JSON.stringify(data);
+
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    start(controller) {
+      const chunk = JSON.stringify({ choices: [{ delta: { content: reply } }] });
+      controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+      controller.close();
+    },
+  });
+
+  return new Response(stream, {
     headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
   });
 }
