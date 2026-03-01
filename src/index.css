@@ -52,6 +52,8 @@
     --model-quillbot: 217 91% 60%;
     --model-gemini: 142 71% 45%;
     --model-deepseek: 271 76% 53%;
+    --model-claude: 25 90% 55%;
+    --model-gemini3flash: 185 80% 50%;
   }
 
   .dark {
@@ -99,6 +101,8 @@
     --model-quillbot: 217 91% 65%;
     --model-gemini: 142 71% 55%;
     --model-deepseek: 271 76% 65%;
+    --model-claude: 25 90% 60%;
+    --model-gemini3flash: 185 80% 55%;
   }
 }
 
